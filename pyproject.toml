@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "freezeburn"
-version = "0.1.0"
+version = "0.2.0"
 description = "Freeze what you actually use. Generate requirements.txt from real imports and installed packages."
 readme = "README.md"
-license = {text = "MIT"}
+license = {text = "GPL-3.0"}
 requires-python = ">=3.10"
 authors = [
     {name = "dodogabrie", email = "dodogabrie@users.noreply.github.com"}
@@ -23,7 +23,7 @@ classifiers = [
     "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.10",

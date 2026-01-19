@@ -66,8 +66,38 @@ def _extract_imports_from_file(file_path: Path) -> set[str]:
     return imports
 
 
-def _collect_imports(project_path: Path) -> set[str]:
-    """STEP 1: Find all .py files and extract imports."""
+def _find_local_modules(project_path: Path, patterns: list[str]) -> set[str]:
+    """Find local module/package names in the project.
+
+    Detects:
+    - Directories with __init__.py (packages)
+    - Directories with any .py files (namespace packages)
+    - Top-level .py files (modules)
+    """
+    local_modules = set()
+
+    for item in project_path.iterdir():
+        # Skip hidden and ignored
+        if item.name.startswith(".") or _should_skip(Path(item.name), patterns):
+            continue
+
+        if item.is_dir():
+            # Check if directory contains any .py files (package or namespace package)
+            if any(item.rglob("*.py")):
+                local_modules.add(item.name)
+        elif item.suffix == ".py" and item.stem != "__init__":
+            # Top-level .py file
+            local_modules.add(item.stem)
+
+    return local_modules
+
+
+def _collect_imports(project_path: Path) -> tuple[set[str], set[str]]:
+    """STEP 1: Find all .py files and extract imports.
+
+    Returns:
+        (imports, local_modules) where local_modules are the project's own modules.
+    """
     patterns = _load_ignore_patterns(project_path)
     imports = set()
 
@@ -77,7 +107,9 @@ def _collect_imports(project_path: Path) -> set[str]:
             continue
         imports.update(_extract_imports_from_file(py_file))
 
-    return imports
+    local_modules = _find_local_modules(project_path, patterns)
+
+    return imports, local_modules
 
 
 # =============================================================================
@@ -183,6 +215,7 @@ def _match_requirements(
     packages: dict[str, str],
     import_map: dict[str, str],
     ambiguous: set[str],
+    local_modules: set[str],
 ) -> tuple[dict[str, str], list[str]]:
     """STEP 3: Match imports to installed packages.
 
@@ -196,8 +229,12 @@ def _match_requirements(
     warnings = []
 
     for imp in imports:
-        # Skip stdlib (takes priority over installed backport packages).
+        # Skip stdlib.
         if imp in stdlib:
+            continue
+
+        # Skip local project modules.
+        if imp in local_modules:
             continue
 
         # Normalize and look up package.
@@ -268,14 +305,16 @@ def generate_requirements(
     Returns:
         (lines, warnings) where lines are "package==version" strings.
     """
-    # Step 1: Collect imports.
-    imports = _collect_imports(project_path)
+    # Step 1: Collect imports and local modules.
+    imports, local_modules = _collect_imports(project_path)
 
     # Step 2: Collect installed packages.
     packages, import_map, ambiguous = _collect_installed()
 
     # Step 3: Filter and match.
-    requirements, warnings = _match_requirements(imports, packages, import_map, ambiguous)
+    requirements, warnings = _match_requirements(
+        imports, packages, import_map, ambiguous, local_modules
+    )
 
     # Step 4: Format output.
     lines = [f"{pkg}=={ver}" for pkg, ver in sorted(requirements.items())]

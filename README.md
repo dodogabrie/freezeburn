@@ -2,7 +2,7 @@
 
 **Freeze what you actually use.**
 
-Generate `requirements.txt` from real imports + installed packages. No guessing. No network.
+Generate `requirements.txt` from real imports + installed packages.
 
 ## Install
 
@@ -26,14 +26,6 @@ freezeburn -q                   # Suppress warnings
 3. Detects stdlib dynamically (`sys.stdlib_module_names`)
 4. Intersects with installed packages
 5. Outputs exact pinned versions
-
-## What It Does NOT Do
-
-- Query PyPI
-- Guess versions
-- Resolve transitive dependencies
-- Detect dynamic imports
-- Be "smart"
 
 ## Ignore Files
 
@@ -65,4 +57,4 @@ Imports (AST)  +  Installed (env)  =  requirements.txt
 
 ## License
 
-MIT
+GPL-3.0
