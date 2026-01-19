@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "freezeburn"
-version = "0.2.0"
+version = "0.4.0"
 description = "Freeze what you actually use. Generate requirements.txt from real imports and installed packages."
 readme = "README.md"
 license = {text = "GPL-3.0"}

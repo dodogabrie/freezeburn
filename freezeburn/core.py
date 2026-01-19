@@ -93,10 +93,11 @@ def _find_local_modules(project_path: Path, patterns: list[str], exclude_submodu
     Detects:
     - Directories with __init__.py (packages)
     - Directories with any .py files (namespace packages)
-    - Top-level .py files (modules)
+    - All .py files (modules) - anywhere in the project
     """
     local_modules = set()
 
+    # Find top-level packages/directories
     for item in project_path.iterdir():
         # Skip hidden and ignored
         if item.name.startswith(".") or _should_skip(Path(item.name), patterns, project_path, exclude_submodules):
@@ -109,6 +110,14 @@ def _find_local_modules(project_path: Path, patterns: list[str], exclude_submodu
         elif item.suffix == ".py" and item.stem != "__init__":
             # Top-level .py file
             local_modules.add(item.stem)
+
+    # Find all .py files anywhere in the project (for intra-package imports)
+    for py_file in project_path.rglob("*.py"):
+        relative = py_file.relative_to(project_path)
+        if _should_skip(relative, patterns, project_path, exclude_submodules):
+            continue
+        if py_file.stem != "__init__":
+            local_modules.add(py_file.stem)
 
     return local_modules
 
