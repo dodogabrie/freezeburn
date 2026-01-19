@@ -12,7 +12,7 @@ def main() -> int:
     """Main entry point for freezeburn."""
     parser = argparse.ArgumentParser(
         prog="freezeburn",
-        description="Freeze what you actually use. No guessing. No network.",
+        description="Freeze what you actually use.",
     )
     parser.add_argument(
         "path", nargs="?", default=".",
@@ -27,6 +27,10 @@ def main() -> int:
         help="Suppress warnings",
     )
     parser.add_argument(
+        "--exclude-submodules", action="store_true",
+        help="Skip scanning git submodules",
+    )
+    parser.add_argument(
         "-v", "--version", action="version",
         version=f"freezeburn {__version__}",
     )
@@ -39,7 +43,11 @@ def main() -> int:
         return 1
 
     print(f"Scanning: {project_path}")
-    lines, warnings = generate_requirements(project_path, warn_missing=not args.quiet)
+    lines, warnings = generate_requirements(
+        project_path,
+        warn_missing=not args.quiet,
+        exclude_submodules=args.exclude_submodules,
+    )
 
     for warning in warnings:
         print(f"Warning: {warning}", file=sys.stderr)

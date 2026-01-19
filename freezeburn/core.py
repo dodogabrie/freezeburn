@@ -34,8 +34,24 @@ def _load_ignore_patterns(project_path: Path) -> list[str]:
     return patterns
 
 
-def _should_skip(relative_path: Path, patterns: list[str]) -> bool:
-    """Check if path should be skipped based on ALWAYS_SKIP or patterns."""
+def _is_submodule(path: Path, project_path: Path) -> bool:
+    """Check if path is inside a git submodule."""
+    current = path.parent if path.is_file() else path
+    while current != project_path and current != current.parent:
+        # Submodules have a .git file (not directory) or .git directory
+        if (current / ".git").exists():
+            return True
+        current = current.parent
+    return False
+
+
+def _should_skip(
+    relative_path: Path,
+    patterns: list[str],
+    project_path: Path | None = None,
+    exclude_submodules: bool = False,
+) -> bool:
+    """Check if path should be skipped based on ALWAYS_SKIP, patterns, or submodules."""
     # Check hardcoded skips.
     if ALWAYS_SKIP & set(relative_path.parts):
         return True
@@ -45,6 +61,11 @@ def _should_skip(relative_path: Path, patterns: list[str]) -> bool:
         if any(fnmatch.fnmatch(part, pattern) for part in relative_path.parts):
             return True
         if fnmatch.fnmatch(path_str, pattern):
+            return True
+    # Check if inside a git submodule (only if flag is set).
+    if exclude_submodules and project_path is not None:
+        full_path = project_path / relative_path
+        if _is_submodule(full_path, project_path):
             return True
     return False
 
@@ -66,7 +87,7 @@ def _extract_imports_from_file(file_path: Path) -> set[str]:
     return imports
 
 
-def _find_local_modules(project_path: Path, patterns: list[str]) -> set[str]:
+def _find_local_modules(project_path: Path, patterns: list[str], exclude_submodules: bool = False) -> set[str]:
     """Find local module/package names in the project.
 
     Detects:
@@ -78,7 +99,7 @@ def _find_local_modules(project_path: Path, patterns: list[str]) -> set[str]:
 
     for item in project_path.iterdir():
         # Skip hidden and ignored
-        if item.name.startswith(".") or _should_skip(Path(item.name), patterns):
+        if item.name.startswith(".") or _should_skip(Path(item.name), patterns, project_path, exclude_submodules):
             continue
 
         if item.is_dir():
@@ -92,7 +113,7 @@ def _find_local_modules(project_path: Path, patterns: list[str]) -> set[str]:
     return local_modules
 
 
-def _collect_imports(project_path: Path) -> tuple[set[str], set[str]]:
+def _collect_imports(project_path: Path, exclude_submodules: bool = False) -> tuple[set[str], set[str]]:
     """STEP 1: Find all .py files and extract imports.
 
     Returns:
@@ -103,11 +124,11 @@ def _collect_imports(project_path: Path) -> tuple[set[str], set[str]]:
 
     for py_file in project_path.rglob("*.py"):
         relative = py_file.relative_to(project_path)
-        if _should_skip(relative, patterns):
+        if _should_skip(relative, patterns, project_path, exclude_submodules):
             continue
         imports.update(_extract_imports_from_file(py_file))
 
-    local_modules = _find_local_modules(project_path, patterns)
+    local_modules = _find_local_modules(project_path, patterns, exclude_submodules)
 
     return imports, local_modules
 
@@ -295,18 +316,20 @@ def write_requirements(lines: list[str], output_path: Path) -> None:
 def generate_requirements(
     project_path: Path,
     warn_missing: bool = True,
+    exclude_submodules: bool = False,
 ) -> tuple[list[str], list[str]]:
     """Generate requirements.txt content.
 
     Args:
         project_path: Directory to scan.
         warn_missing: Include warnings for unresolved imports.
+        exclude_submodules: Skip scanning git submodules.
 
     Returns:
         (lines, warnings) where lines are "package==version" strings.
     """
     # Step 1: Collect imports and local modules.
-    imports, local_modules = _collect_imports(project_path)
+    imports, local_modules = _collect_imports(project_path, exclude_submodules)
 
     # Step 2: Collect installed packages.
     packages, import_map, ambiguous = _collect_installed()
