@@ -3,4 +3,4 @@
 Generate requirements.txt from real imports and installed packages.
 """
 
-__version__ = "0.4.0"
+__version__ = "0.5.0"

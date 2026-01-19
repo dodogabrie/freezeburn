@@ -5,6 +5,7 @@ See ROADMAP.md for the algorithm design.
 
 import ast
 import fnmatch
+import re
 import sys
 from importlib.metadata import distributions
 from pathlib import Path
@@ -221,6 +222,91 @@ def _collect_installed() -> tuple[dict[str, str], dict[str, str], set[str]]:
 
 
 # =============================================================================
+# Orphan Detection
+# =============================================================================
+
+def _get_package_requires(package_name: str) -> set[str]:
+    """Get direct dependencies of a package from metadata.
+
+    Args:
+        package_name: Normalized package name (lowercase, underscores).
+
+    Returns:
+        Set of normalized dependency package names.
+    """
+    # Pattern to extract package name from requirement spec
+    # Handles: "requests>=2.0", "click", "package[extra]", "pkg; python_version<'3'"
+    req_pattern = re.compile(r"^([a-zA-Z0-9_-]+)")
+
+    for dist in distributions():
+        name = dist.metadata["Name"]
+        if not name:
+            continue
+        norm = name.lower().replace("-", "_")
+        if norm != package_name:
+            continue
+
+        requires = dist.requires or []
+        deps = set()
+        for req in requires:
+            # Skip extras-only requirements like "package; extra == 'dev'"
+            if "extra ==" in req or "extra==" in req:
+                continue
+            match = req_pattern.match(req.strip())
+            if match:
+                deps.add(match.group(1).lower().replace("-", "_"))
+        return deps
+
+    return set()
+
+
+def _build_dependency_tree(
+    root_packages: set[str],
+    all_packages: dict[str, str],
+) -> set[str]:
+    """Recursively collect all transitive dependencies.
+
+    Args:
+        root_packages: Set of package names that are directly used.
+        all_packages: Dict of all installed packages {name: version}.
+
+    Returns:
+        Set of all package names in the dependency tree.
+    """
+    tree = set()
+    to_visit = list(root_packages)
+
+    while to_visit:
+        pkg = to_visit.pop()
+        if pkg in tree:
+            continue
+        if pkg not in all_packages:
+            continue
+        tree.add(pkg)
+        deps = _get_package_requires(pkg)
+        to_visit.extend(deps - tree)
+
+    return tree
+
+
+def _find_orphans(
+    tree: set[str],
+    all_packages: dict[str, str],
+) -> dict[str, str]:
+    """Find installed packages not in dependency tree.
+
+    Args:
+        tree: Set of package names in the dependency tree.
+        all_packages: Dict of all installed packages {name: version}.
+
+    Returns:
+        Dict of orphan packages {name: version}.
+    """
+    orphan_names = set(all_packages.keys()) - tree
+    return {name: all_packages[name] for name in orphan_names}
+
+
+# =============================================================================
 # STEP 3: Filter and match
 # =============================================================================
 
@@ -326,16 +412,21 @@ def generate_requirements(
     project_path: Path,
     warn_missing: bool = True,
     exclude_submodules: bool = False,
-) -> tuple[list[str], list[str]]:
+    include_orphans: bool = False,
+) -> tuple[list[str], list[str], dict[str, str]]:
     """Generate requirements.txt content.
 
     Args:
         project_path: Directory to scan.
         warn_missing: Include warnings for unresolved imports.
         exclude_submodules: Skip scanning git submodules.
+        include_orphans: Include orphan packages (installed but not in dependency tree).
 
     Returns:
-        (lines, warnings) where lines are "package==version" strings.
+        (lines, warnings, orphans) where:
+        - lines: "package==version" strings
+        - warnings: warning messages
+        - orphans: dict of orphan packages {name: version}
     """
     # Step 1: Collect imports and local modules.
     imports, local_modules = _collect_imports(project_path, exclude_submodules)
@@ -348,7 +439,15 @@ def generate_requirements(
         imports, packages, import_map, ambiguous, local_modules
     )
 
-    # Step 4: Format output.
+    # Step 4: Build dependency tree and find orphans.
+    tree = _build_dependency_tree(set(requirements.keys()), packages)
+    orphans = _find_orphans(tree, packages)
+
+    # Step 5: Optionally include orphans in requirements.
+    if include_orphans:
+        requirements.update(orphans)
+
+    # Step 6: Format output.
     lines = [f"{pkg}=={ver}" for pkg, ver in sorted(requirements.items())]
 
-    return lines, warnings if warn_missing else []
+    return lines, warnings if warn_missing else [], orphans

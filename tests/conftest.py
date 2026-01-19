@@ -45,7 +45,7 @@ import sys
 sys.path.insert(0, "{Path(__file__).parent.parent}")
 from freezeburn.core import generate_requirements
 from pathlib import Path
-lines, warnings = generate_requirements(Path("{project_path}"))
+lines, warnings, orphans = generate_requirements(Path("{project_path}"))
 print("LINES:")
 for line in lines:
     print(line)

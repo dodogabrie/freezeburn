@@ -31,6 +31,10 @@ def main() -> int:
         help="Skip scanning git submodules",
     )
     parser.add_argument(
+        "--include-orphans", action="store_true",
+        help="Include orphan packages (installed but not in dependency tree)",
+    )
+    parser.add_argument(
         "-v", "--version", action="version",
         version=f"freezeburn {__version__}",
     )
@@ -43,14 +47,22 @@ def main() -> int:
         return 1
 
     print(f"Scanning: {project_path}")
-    lines, warnings = generate_requirements(
+    lines, warnings, orphans = generate_requirements(
         project_path,
         warn_missing=not args.quiet,
         exclude_submodules=args.exclude_submodules,
+        include_orphans=args.include_orphans,
     )
 
     for warning in warnings:
         print(f"Warning: {warning}", file=sys.stderr)
+
+    if not args.quiet and orphans:
+        for name in sorted(orphans.keys()):
+            print(
+                f"Orphan: '{name}' (installed but not in dependency tree)",
+                file=sys.stderr,
+            )
 
     write_requirements(lines, Path(args.output))
     print(f"Found {len(lines)} package(s) -> {args.output}")
