@@ -289,11 +289,19 @@ def _build_dependency_tree(
     return tree
 
 
+# Packages always present in venvs, not useful to report as orphans.
+VENV_PACKAGES = {"pip", "setuptools", "wheel", "pkg_resources", "freezeburn"}
+
+
 def _find_orphans(
     tree: set[str],
     all_packages: dict[str, str],
 ) -> dict[str, str]:
     """Find installed packages not in dependency tree.
+
+    Returns only "root" orphans - packages that are not dependencies of other
+    orphans. For example, if uvicorn is orphan and depends on click, only
+    uvicorn is returned (not click).
 
     Args:
         tree: Set of package names in the dependency tree.
@@ -302,8 +310,17 @@ def _find_orphans(
     Returns:
         Dict of orphan packages {name: version}.
     """
-    orphan_names = set(all_packages.keys()) - tree
-    return {name: all_packages[name] for name in orphan_names}
+    orphan_names = set(all_packages.keys()) - tree - VENV_PACKAGES
+
+    # Build dependency tree of orphans to find root orphans only
+    orphan_deps = set()
+    for orphan in orphan_names:
+        deps = _get_package_requires(orphan)
+        orphan_deps.update(deps)
+
+    # Root orphans = orphans that are not dependencies of other orphans
+    root_orphans = orphan_names - orphan_deps
+    return {name: all_packages[name] for name in root_orphans}
 
 
 # =============================================================================

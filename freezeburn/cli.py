@@ -58,9 +58,9 @@ def main() -> int:
         print(f"Warning: {warning}", file=sys.stderr)
 
     if not args.quiet and orphans:
-        for name in sorted(orphans.keys()):
+        for name, version in sorted(orphans.items()):
             print(
-                f"Orphan: '{name}' (installed but not in dependency tree)",
+                f"Orphan: '{name}=={version}' (installed but not in dependency tree)",
                 file=sys.stderr,
             )
 
